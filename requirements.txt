@@ -1,0 +1,17 @@
+# Core dependencies
+numpy>=1.20.0
+scipy>=1.7.0
+
+# Optimization and Surrogate Models
+scikit-optimize>=0.9.0
+smt==1.3.0
+pydacefit>=0.1.0
+pymoo>=0.5.0
+
+# Utilities
+tqdm>=4.60.0
+matplotlib>=3.3.0
+
+# Testing (optional)
+pytest>=6.0.0
+pytest-cov>=2.10.0
