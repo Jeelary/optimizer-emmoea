@@ -57,11 +57,7 @@ def run_example():
     #objectives = UF7(decisions)
     plt.figure(figsize=(10, 6))
     plt.scatter(objectives[:, 0], objectives[:, 1], alpha=0.6, s=30, label=f'IGD={igd:.4f}')
-
-
-
-    plt.plot(x_true, y_true, 'r--', label='Истинный фронт', linewidth=2)
-    
+    plt.plot(x_true, y_true, 'r--', label='Истинный фронт', linewidth=2)    
     plt.xlabel('f1', fontsize=12)
     plt.ylabel('f2', fontsize=12)
     plt.title('Фронт Парето - UF7', fontsize=14)
@@ -70,9 +66,7 @@ def run_example():
     plt.tight_layout()
     plt.savefig('emmoea_result.png', dpi=150)
     print("\n✓ График сохранён как 'emmoea_result.png'")
-    plt.show()
-
-    
+    plt.show()    
 
 if __name__ == "__main__":
     run_example()

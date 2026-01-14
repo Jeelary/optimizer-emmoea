@@ -1,5 +1,5 @@
 # EMMOEA - Efficient Multi-Objective Surrogate-Assisted Evolutionary Algorithm
-
+# A Performance Indicator-Based Infill Criterion for Expensive Multi-/Many-Objective Optimization. Shufen Qin, Chaoli Sun, Qiqi Liu, Yaochu Jin.
 Реализация многоцелевого эволюционного алгоритма с суррогатными моделями.
 
 ## Модули
@@ -31,8 +31,8 @@
 
 ### `emmoea/problems/__init__.py`
 Тестовые функции:
-- `UF7(X)` - 2 объектива, 10 переменных
-- `UF1(X)` - 2 объектива, 30 переменных
+- `UF7(X)` - 2 целевых функций, 10 переменных
+- `UF1(X)` - 2 целевых функций, 30 переменных
 - `ZDT1(X)` - классическая функция, 30 переменных
 
 ## Установка
@@ -115,7 +115,7 @@ python tests/
 
 ## Авторы
 
-Сергей
+Горбунов Сергей, Владимир Становов
 
 ## Лицензия
 
