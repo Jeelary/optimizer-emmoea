@@ -5,12 +5,12 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setup(
     name="optimizer-emmoea",
-    version="0.2.0",
+    version="0.1.0",
     author="Sergei",
     description="Efficient Multi-Objective Surrogate-Assisted Evolutionary Algorithm with Performance Indicator-Based Infill Criterion",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/yourusername/optimizer-emmoea",
+    url="https://github.com/Jeelary/optimizer-emmoea",
     packages=find_packages(exclude=["tests", "examples"]),
     include_package_data=True,
     classifiers=[
