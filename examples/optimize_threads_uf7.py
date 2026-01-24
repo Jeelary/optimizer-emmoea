@@ -35,7 +35,7 @@ def run_optimization_thread(thread_id, bounds, num_threads):
         num_var=10,
         bounds=bounds,
         problem=UF7,
-        surrogate='DACE',
+        surrogate='MultiTaskIBNN',
         max_evals=4500 // num_threads,
         gmax=10
     )

@@ -35,8 +35,8 @@ def run_example():
         num_var=10,
         bounds=bounds,
         problem=UF7,
-        surrogate='KRG',
-        max_evals=150,
+        surrogate='MultiTaskIBNN',
+        max_evals=400,
         gmax=10
     )
     

@@ -7,9 +7,12 @@ from pydacefit.corr import corr_gauss
 from pydacefit.regr import regr_constant
 from pymoo.util.nds.non_dominated_sorting import NonDominatedSorting
 from scipy.stats import norm
+import torch
+import tempfile
 from utils.sampling import UniformPoint
 from utils.ga_operators import GAreal
 from utils.selection import kriging_selection
+from models.ibnn import MultiTaskIBNN
 
 class EMMOEA:
     def __init__(self, num_pop, num_obj, num_var, bounds, problem, surrogate='KRG', max_evals=400, gmax=10):
@@ -50,16 +53,33 @@ class EMMOEA:
             while self.num_evals > evals:
                 TSObj = np.copy(TS_objs)         
                 TSDec = np.copy(TS_decs)
-                for i in range(self.M):
-                    if self.surrogate == 'DACE':
-                        Kmodels[i] = DACE(regr=regr_constant, corr=corr_gauss, theta=THETA[i, :], thetaL=lob, thetaU=upb)
-                        Kmodels[i].fit(TSDec, TSObj[:, i])
-                        THETA[i, :] = Kmodels[i].model['theta']
-                    elif self.surrogate == 'KRG':
-                        Kmodels[i] = KRG(theta0=np.ones(self.D), print_global=False)
-                        Kmodels[i].set_training_values(TSDec, TSObj[:, i])
-                        Kmodels[i].train()
-                        THETA[i, :] = Kmodels[i].optimal_theta
+                if self.surrogate == 'MultiTaskIBNN':
+                    # Создаём одну модель для ВСЕХ целевых функций
+                    model_args = {"var_b": 1.0, "var_w": 1.0, "depth": 2}
+                    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+                    # Нормализуем данные в [0, 1] и используем float64 для лучшей численной стабильности
+                    x_min, x_max = TSDec.min(axis=0), TSDec.max(axis=0)
+                    x_min = np.where(x_max == x_min, x_min - 1, x_min)  # Избежать деления на 0
+                    x_normalized = (TSDec - x_min) / (x_max - x_min)
+                    train_x = torch.tensor(x_normalized, dtype=torch.float64).to(device)
+                    train_y = torch.tensor(TSObj, dtype=torch.float64).to(device)  # ВСЕ целевые функции!
+                    Kmodels[0] = MultiTaskIBNN(model_args, self.D, self.M, device)
+                    with tempfile.TemporaryDirectory() as tmpdir:
+                        Kmodels[0].fit_and_save(train_x, train_y, tmpdir)
+                    # Сохраняем параметры нормализации для предсказаний
+                    self.x_min_ibnn = x_min
+                    self.x_max_ibnn = x_max
+                else:
+                    for i in range(self.M):
+                        if self.surrogate == 'DACE':
+                            Kmodels[i] = DACE(regr=regr_constant, corr=corr_gauss, theta=THETA[i, :], thetaL=lob, thetaU=upb)
+                            Kmodels[i].fit(TSDec, TSObj[:, i])
+                            THETA[i, :] = Kmodels[i].model['theta']
+                        elif self.surrogate == 'KRG':
+                            Kmodels[i] = KRG(theta0=np.ones(self.D), print_global=False)
+                            Kmodels[i].set_training_values(TSDec, TSObj[:, i])
+                            Kmodels[i].train()
+                            THETA[i, :] = Kmodels[i].optimal_theta
                 g = 0
                 while g < self.gmax:
                     OffDec = GAreal(PopDec, self.bounds)
@@ -67,18 +87,31 @@ class EMMOEA:
                     N = PopDec.shape[0]
                     PopObj = np.zeros((N, self.M))
                     MSE = np.zeros((N, self.M))
-                    for i in range(N):
-                        for j in range(self.M):
-                            if self.surrogate == 'DACE':
-                                y_pred, mse_pred = Kmodels[j].predict(
-                                    PopDec[i].reshape(1, self.D),
-                                    return_mse=True
-                                )
-                                PopObj[i, j] = y_pred[0, 0]
-                                MSE[i, j]    = mse_pred[0, 0]
-                            elif self.surrogate == 'KRG':
-                                PopObj[i][j] = Kmodels[j].predict_values(PopDec[i].reshape(-1, self.D)).item()
-                                MSE[i][j] = Kmodels[j].predict_variances(PopDec[i].reshape(-1, self.D)).item()
+                    
+                    if self.surrogate == 'MultiTaskIBNN':
+                        # Одна модель для всех целевых функций
+                        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+                        # Нормализуем данные используя сохраненные параметры
+                        PopDec_normalized = (PopDec - self.x_min_ibnn) / (self.x_max_ibnn - self.x_min_ibnn)
+                        X_test = torch.tensor(PopDec_normalized, dtype=torch.float64).to(device)
+                        posterior = Kmodels[0].posterior(X_test)
+                        mean = posterior.mean.detach().cpu().numpy()
+                        variance = posterior.variance.detach().cpu().numpy()
+                        PopObj = mean
+                        MSE = variance
+                    else:
+                        for i in range(N):
+                            for j in range(self.M):
+                                if self.surrogate == 'DACE':
+                                    y_pred, mse_pred = Kmodels[j].predict(
+                                        PopDec[i].reshape(1, self.D),
+                                        return_mse=True
+                                    )
+                                    PopObj[i, j] = y_pred[0, 0]
+                                    MSE[i, j]    = mse_pred[0, 0]
+                                elif self.surrogate == 'KRG':
+                                    PopObj[i][j] = Kmodels[j].predict_values(PopDec[i].reshape(-1, self.D)).item()
+                                    MSE[i][j] = Kmodels[j].predict_variances(PopDec[i].reshape(-1, self.D)).item()
                                 
                     index = kriging_selection(PopObj, V)
                     PopDec = PopDec[index]
@@ -102,6 +135,21 @@ class EMMOEA:
                     IPmodel.set_training_values(TSDec, IP)
                     IPmodel.train()
                     THETA0 = IPmodel.theta0
+                elif self.surrogate == 'MultiTaskIBNN':
+                    model_args = {"var_b": 1.0, "var_w": 1.0, "depth": 2}
+                    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+                    # Нормализуем данные и используем float64
+                    x_min_ip, x_max_ip = TSDec.min(axis=0), TSDec.max(axis=0)
+                    x_min_ip = np.where(x_max_ip == x_min_ip, x_min_ip - 1, x_min_ip)
+                    x_normalized_ip = (TSDec - x_min_ip) / (x_max_ip - x_min_ip)
+                    train_x = torch.tensor(x_normalized_ip, dtype=torch.float64).to(device)
+                    train_y = torch.tensor(IP.reshape(-1, 1), dtype=torch.float64).to(device)
+                    IPmodel = MultiTaskIBNN(model_args, self.D, 1, device)
+                    with tempfile.TemporaryDirectory() as tmpdir:
+                        IPmodel.fit_and_save(train_x, train_y, tmpdir)
+                    # Сохраняем параметры нормализации для IP
+                    self.x_min_ip = x_min_ip
+                    self.x_max_ip = x_max_ip
                 sizePopDec = PopDec.shape[0]
                 preIP = np.zeros((sizePopDec, 1))
                 MSEIP = np.zeros((sizePopDec, 1))
@@ -114,6 +162,14 @@ class EMMOEA:
                     mseip = IPmodel.predict_variances(PopDec)
                     preIP = preip.flatten()
                     MSEIP = mseip.flatten()
+                elif self.surrogate == 'MultiTaskIBNN':
+                    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+                    # Нормализуем данные используя сохраненные параметры
+                    PopDec_normalized_ip = (PopDec - self.x_min_ip) / (self.x_max_ip - self.x_min_ip)
+                    X_test = torch.tensor(PopDec_normalized_ip, dtype=torch.float64).to(device)
+                    posterior = IPmodel.posterior(X_test)
+                    preIP = posterior.mean.detach().cpu().numpy().flatten()
+                    MSEIP = posterior.variance.detach().cpu().numpy().flatten()
                 s = np.sqrt(MSEIP)
                 lamda = (IPmin - preIP) / s
                 phi = norm.pdf(lamda)
