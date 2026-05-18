@@ -1,4 +1,4 @@
-# EMMOEA - Efficient Multi-Objective Surrogate-Assisted Evolutionary Algorithm
+# EMMOEA - Expensive Multi-/Many-Objective Evolutionary Algorithm
 
 Реализация многокритериального эволюционного алгоритма с суррогатной поддержкой. Основана на статье "A Performance Indicator-Based Infill Criterion for Expensive Multi-/Many-Objective Optimization" (Shufen Qin, Chaoli Sun, Qiqi Liu, Yaochu Jin).
 
